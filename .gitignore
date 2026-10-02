@@ -1,0 +1,11 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Temporary / Scratch scripts
+*.tmp
+*.tmp.*
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
