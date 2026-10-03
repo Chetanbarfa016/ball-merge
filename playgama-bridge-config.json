@@ -1,6 +1,7 @@
 {
   "platforms": {},
   "advertisement": {
+    "minimumDelayBetweenInterstitial": 0,
     "interstitial": {
       "autoShow": false
     },
