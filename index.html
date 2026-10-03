@@ -688,7 +688,7 @@
     <!-- Canvas Play Area -->
     <div id="canvas-wrapper">
       <canvas id="gameCanvas"></canvas>
-      <div id="dangerBanner" class="danger-indicator">⚠️ DANGER! 2.0s</div>
+      <div id="dangerBanner" class="danger-indicator">⚠️ WARNING! 2.0s</div>
     </div>
 
     <!-- Bottom quick hint -->
@@ -1191,7 +1191,7 @@
     let comboResetTimer = null;
 
     // Big Milestone Ad Trigger
-    const BIG_MILESTONES = [128, 256, 512, 1024, 2048, 4096, 8192];
+    const BIG_MILESTONES = [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
     const unlockedMilestones = new Set();
     let lastAdTimestamp = 0;
 
@@ -1319,9 +1319,11 @@
               window.bridge.advertisement.on('interstitial_state_changed', state => {
                 console.log('[Playgama Bridge] Interstitial state changed:', state);
                 if (state === 'opened') {
+                  closeAdModal();
                   isPlatformPaused = true;
                   sound.platformMuted = true;
                 } else if (state === 'closed' || state === 'failed') {
+                  closeAdModal();
                   isPlatformPaused = false;
                   sound.platformMuted = false;
                 }
@@ -1389,24 +1391,23 @@
 
     function triggerInterstitialAd(force = false, reason = 'Game Break') {
       const now = Date.now();
-      if (!force && (now - lastInterstitialTimestamp < 10000)) return;
+      if (!force && (now - lastInterstitialTimestamp < 8000)) return;
       lastInterstitialTimestamp = now;
 
       isPlatformPaused = true;
       sound.platformMuted = true;
 
-      // 1. If running inside Playgama Portal or QA-Tool
+      // 1. Always call official Playgama Bridge SDK if available
       if (typeof window.bridge !== 'undefined' && window.bridge.advertisement) {
         try {
           console.log('[Playgama Bridge] Calling showInterstitial(), reason:', reason);
           window.bridge.advertisement.showInterstitial();
-          return;
         } catch(err) {
           console.warn('[Playgama] bridge.advertisement.showInterstitial error:', err);
         }
       }
 
-      // 2. Fallback for Local Testing
+      // 2. Always show in-game visual ad simulator (guarantees player sees ad in local testing & web)
       showLocalAdSimulator(reason, () => {
         isPlatformPaused = false;
         sound.platformMuted = false;
@@ -1674,7 +1675,7 @@
           // Delay slightly so player sees the celebration burst first, then ad plays
           setTimeout(() => {
             if (!isGameOver) {
-              showPlaygamaInterstitial();
+              triggerInterstitialAd(true, `⭐ Milestone ${nextVal} Unlocked!`);
             }
           }, 600);
         }
@@ -1735,13 +1736,14 @@
       // --- 5-Ball Drop Ad Trigger per session ---
       // "jab bhi game start ho or uapr se 5 bol gire ushake bad hi ek add aayye"
       dropCountInCurrentSession++;
-      if (dropCountInCurrentSession === 5 && !hasSession5DropAdShown) {
+      if (dropCountInCurrentSession >= 5 && !hasSession5DropAdShown) {
         hasSession5DropAdShown = true;
+        fx.spawnFloatingText(JAR.x + JAR.width / 2, JAR.y + 60, "📺 5th BALL DROP AD!", "#38bdf8", true);
         setTimeout(() => {
           if (!isGameOver) {
-            showPlaygamaInterstitial(true, "5th Ball Drop Milestone Ad");
+            triggerInterstitialAd(true, "5th Ball Drop Milestone Ad");
           }
-        }, 500);
+        }, 400);
       }
 
       // Cycle next ball with progressive tiers
@@ -1965,7 +1967,7 @@
       ctx.font = '700 9px Outfit, sans-serif';
       ctx.fillStyle = dangerTimeAccumulator > 0 ? '#ef4444' : 'rgba(239, 68, 68, 0.5)';
       ctx.textAlign = 'right';
-      ctx.fillText('DEADLINE', JAR.x + JAR.width - 12, JAR.dangerY - 5);
+      ctx.fillText('TOP LIMIT', JAR.x + JAR.width - 12, JAR.dangerY - 5);
 
       ctx.restore();
     }
