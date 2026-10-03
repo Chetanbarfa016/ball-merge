@@ -519,6 +519,30 @@
       gap: 8px;
       margin-bottom: 8px;
     }
+    .reward-btn-pulse {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.4), rgba(139, 92, 246, 0.4)) !important;
+      border: 1px solid rgba(236, 72, 153, 0.7) !important;
+      width: auto !important;
+      padding: 0 10px !important;
+      gap: 5px;
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 14px rgba(236, 72, 153, 0.5) !important;
+      animation: pulseGlow 1.6s infinite alternate;
+      cursor: pointer !important;
+    }
+    .reward-btn-pulse:hover {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 0 18px rgba(236, 72, 153, 0.8) !important;
+    }
+    .reward-btn-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: #fbcfe8;
+      letter-spacing: 0.5px;
+    }
+
     .btn-rewarded:hover {
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
@@ -586,6 +610,11 @@
       </div>
 
       <div class="top-controls">
+        <button id="rewardAdBtn" class="icon-btn reward-btn-pulse" title="Watch Rewarded Ad for +500 Bonus & Clear Balls" aria-label="Watch Rewarded Ad">
+          <span style="font-size: 15px;">🎁</span>
+          <span class="reward-btn-label">AD</span>
+        </button>
+
         <button id="soundBtn" class="icon-btn" title="Toggle Sound" aria-label="Toggle Sound">
           <svg id="soundIconOn" viewBox="0 0 24 24">
             <path d="M14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77zm-2.5-1.23l-5 5H2v10h4.5l5 5V2zm-3.5 8H4v4h4.5l3.5 3.5v-11L8 10zm8.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
@@ -1252,6 +1281,7 @@
 
             if (window.bridge.advertisement) {
               window.bridge.advertisement.on('interstitial_state_changed', state => {
+                console.log('[Playgama Bridge] Interstitial state changed:', state);
                 if (state === 'opened') {
                   isPlatformPaused = true;
                   sound.platformMuted = true;
@@ -1262,16 +1292,24 @@
               });
 
               window.bridge.advertisement.on('rewarded_state_changed', state => {
+                console.log('[Playgama Bridge] Rewarded state changed:', state);
                 if (state === 'opened') {
                   isPlatformPaused = true;
                   sound.platformMuted = true;
                 } else if (state === 'rewarded') {
-                  reviveGame();
+                  handleRewardGranted();
                 } else if (state === 'closed' || state === 'failed') {
                   isPlatformPaused = false;
                   sound.platformMuted = false;
                 }
               });
+
+              try {
+                window.bridge.advertisement.on('rewarded', () => {
+                  console.log('[Playgama Bridge] Rewarded event fired');
+                  handleRewardGranted();
+                });
+              } catch(_) {}
             }
           })
           .catch(err => {
@@ -1288,34 +1326,92 @@
       }
     }
 
-    // --- Playgama Interstitial Ad System (Works both on Localhost & Live Portal) ---
-    let adTimerInterval = null;
+    // --- Playgama Bridge Advertisement System (100% QA-Tool & Live Compatible) ---
+    let lastInterstitialTimestamp = 0;
+    let localAdTimerInterval = null;
 
-    function showPlaygamaInterstitial(force = false, reason = "Sponsored Ad Break", onClose = null) {
-      const now = Date.now();
-      if (!force && (now - lastAdTimestamp < 20000)) {
-        return;
-      }
-      lastAdTimestamp = now;
-
-      // 1. Call official Playgama Bridge SDK
-      if (typeof window.bridge !== 'undefined' && window.bridge.advertisement) {
-        try {
-          window.bridge.advertisement.showInterstitial();
-        } catch(e) {}
-      }
-
-      // 2. Pause physics and audio during the ad
+    function triggerRewardedAd(placement = 'rewarded_bonus') {
+      console.log('[Playgama] Triggering Rewarded Ad, placement:', placement);
       isPlatformPaused = true;
       sound.platformMuted = true;
 
-      // 3. Show guaranteed visual Ad Modal (guaranteed visual feedback on local test and web)
+      // 1. If running inside Playgama Portal or QA-Tool
+      if (typeof window.bridge !== 'undefined' && window.bridge.advertisement) {
+        try {
+          window.bridge.advertisement.showRewarded(placement);
+          return;
+        } catch(err) {
+          console.warn('[Playgama] bridge.advertisement.showRewarded error:', err);
+        }
+      }
+
+      // 2. Fallback for Local Testing (when no Playgama bridge is injected)
+      showLocalAdSimulator('🎬 Rewarded Video Ad Break', () => {
+        handleRewardGranted();
+      });
+    }
+
+    function triggerInterstitialAd(reason = 'Game Break') {
+      const now = Date.now();
+      if (now - lastInterstitialTimestamp < 12000) return;
+      lastInterstitialTimestamp = now;
+
+      isPlatformPaused = true;
+      sound.platformMuted = true;
+
+      // 1. If running inside Playgama Portal or QA-Tool
+      if (typeof window.bridge !== 'undefined' && window.bridge.advertisement) {
+        try {
+          window.bridge.advertisement.showInterstitial();
+          return;
+        } catch(err) {
+          console.warn('[Playgama] bridge.advertisement.showInterstitial error:', err);
+        }
+      }
+
+      // 2. Fallback for Local Testing
+      showLocalAdSimulator(reason, () => {
+        isPlatformPaused = false;
+        sound.platformMuted = false;
+      });
+    }
+
+    function handleRewardGranted() {
+      console.log('[Playgama] Reward Granted Event Executing!');
+      if (isGameOver) {
+        reviveGame();
+      } else {
+        score += 500;
+        updateScoreUI();
+        fx.spawnFloatingText(JAR.x + JAR.width / 2, JAR.y + 60, "🎁 +500 BONUS REWARD!", "#facc15", true);
+
+        // Remove top cluttered balls to help player
+        const bodies = Composite.allBodies(engine.world);
+        const discs = bodies.filter(b => b.val);
+        discs.sort((a, b) => a.position.y - b.position.y);
+        const countToRemove = Math.min(3, discs.length);
+        for (let i = 0; i < countToRemove; i++) {
+          const b = discs[i];
+          const tier = getTier(b.val);
+          fx.spawnMergeBurst(b.position.x, b.position.y, tier.color1, tier.color2, 16);
+          Composite.remove(engine.world, b);
+        }
+        try {
+          sound.playMerge(3, 512);
+        } catch(_) {}
+      }
+    }
+
+    function showLocalAdSimulator(reason = 'Ad Break', onClose = null) {
       const adModal = document.getElementById('adModal');
       const skipBtn = document.getElementById('skipAdBtn');
       const adCountdownText = document.getElementById('adCountdownText');
       const adReasonText = document.getElementById('adReasonText');
 
-      if (!adModal) return;
+      if (!adModal) {
+        if (typeof onClose === 'function') onClose();
+        return;
+      }
 
       if (adReasonText) adReasonText.textContent = reason;
       adModal.classList.add('open');
@@ -1328,11 +1424,11 @@
       skipBtn.textContent = `Skip in ${secondsLeft}s`;
       adCountdownText.textContent = `Skip in ${secondsLeft}s`;
 
-      clearInterval(adTimerInterval);
-      adTimerInterval = setInterval(() => {
+      clearInterval(localAdTimerInterval);
+      localAdTimerInterval = setInterval(() => {
         secondsLeft--;
         if (secondsLeft <= 0) {
-          clearInterval(adTimerInterval);
+          clearInterval(localAdTimerInterval);
           skipBtn.disabled = false;
           skipBtn.style.opacity = '1';
           skipBtn.style.cursor = 'pointer';
@@ -1352,7 +1448,7 @@
     }
 
     function closeAdModal() {
-      clearInterval(adTimerInterval);
+      clearInterval(localAdTimerInterval);
       const adModal = document.getElementById('adModal');
       if (adModal) adModal.classList.remove('open');
       isPlatformPaused = false;
@@ -1360,14 +1456,11 @@
     }
 
     function watchRewardedRevive() {
-      showPlaygamaInterstitial(true, "Rewarded Video Revive", () => {
-        reviveGame();
-      });
-      if (typeof window.bridge !== 'undefined' && window.bridge.advertisement && window.bridge.advertisement.isRewardedSupported) {
-        try {
-          window.bridge.advertisement.showRewarded();
-        } catch(e) {}
-      }
+      triggerRewardedAd('rewarded_revive');
+    }
+
+    function showPlaygamaInterstitial(force = false, reason = "Sponsored Ad Break", onClose = null) {
+      triggerInterstitialAd(reason);
     }
 
     function reviveGame() {
@@ -2089,6 +2182,17 @@
     restartBtn.addEventListener('click', restartGame);
     modalRestartBtn.addEventListener('click', restartGame);
     modalReviveBtn.addEventListener('click', watchRewardedRevive);
+    const rewardAdBtn = document.getElementById('rewardAdBtn');
+    if (rewardAdBtn) {
+      rewardAdBtn.addEventListener('click', () => {
+        triggerRewardedAd('header_bonus');
+      });
+      rewardAdBtn.addEventListener('pointerup', () => {
+        triggerRewardedAd('header_bonus');
+      });
+    }
+    window.triggerRewardedAd = triggerRewardedAd;
+    window.triggerInterstitialAd = triggerInterstitialAd;
 
     soundBtn.addEventListener('click', () => {
       sound.enabled = !sound.enabled;

@@ -1,14 +1,9 @@
 {
-  "platforms": {
-    "default": {
-      "advertisement": {
-        "interstitial": {
-          "autoShow": false
-        },
-        "rewarded": {
-          "placement": "rewarded_revive"
-        }
-      }
-    }
+  "platforms": {},
+  "advertisement": {
+    "interstitial": {
+      "autoShow": false
+    },
+    "rewarded": {}
   }
 }
