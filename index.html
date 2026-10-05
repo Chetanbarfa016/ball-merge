@@ -813,6 +813,71 @@
   </div>
 
   <script>
+  // Safe storage helper that NEVER throws SecurityError in cross-origin sandboxed iframes
+  const safeStorage = {
+    getItem(key) {
+      try {
+        if (typeof window !== 'undefined' && 'localStorage' in window && window.localStorage) {
+          return window.safeStorage.getItem(key);
+        }
+      } catch (_) {}
+      return null;
+    },
+    setItem(key, val) {
+      try {
+        if (typeof window !== 'undefined' && 'localStorage' in window && window.localStorage) {
+          window.safeStorage.setItem(key, val);
+        }
+      } catch (_) {}
+    }
+  };
+
+  // Immediate top-level global handler so Start Game button ALWAYS starts the game
+  window.isGameStarted = false;
+  window.isPlatformPaused = false;
+  window.canDrop = true;
+
+  window.handleStartGame = function(e) {
+    if (e) {
+      try { e.preventDefault(); } catch(_) {}
+      try { e.stopPropagation(); } catch(_) {}
+    }
+    console.log('[Playgama] Start Game clicked! Dismissing modal and launching physics...');
+
+    const sm = document.getElementById('startModal');
+    if (sm) {
+      sm.classList.remove('open');
+      sm.style.setProperty('display', 'none', 'important');
+      sm.style.setProperty('visibility', 'hidden', 'important');
+      sm.style.setProperty('pointer-events', 'none', 'important');
+      try { sm.remove(); } catch(_) {}
+    }
+
+    window.isGameStarted = true;
+    window.isPlatformPaused = false;
+    window.canDrop = true;
+
+    try {
+      if (typeof window.bridge !== 'undefined' && window.bridge.platform && window.bridge.platform.sendMessage) {
+        window.bridge.platform.sendMessage('game_ready');
+      }
+    } catch(_) {}
+
+    try {
+      if (window.sound) {
+        window.sound.platformMuted = false;
+        window.sound.init();
+        window.sound.playDrop();
+      }
+    } catch(_) {}
+
+    try {
+      if (typeof window.triggerInternalStart === 'function') {
+        window.triggerInternalStart();
+      }
+    } catch(_) {}
+  };
+
 (function() {
     'use strict';
 
@@ -1149,7 +1214,7 @@
     let isGameStarted = false; // Controlled by Start Popup
     let engine = null;
     let score = 0;
-    let bestScore = parseInt(localStorage.getItem('2048_drop_best_score') || '0', 10);
+    let bestScore = parseInt(safeStorage.getItem('2048_drop_best_score') || '0', 10);
     bestValElem.textContent = bestScore.toLocaleString();
     startBestScoreElem.textContent = bestScore.toLocaleString();
 
@@ -1295,7 +1360,7 @@
                     bestScore = cloudScore;
                     bestValElem.textContent = bestScore.toLocaleString();
                     startBestScoreElem.textContent = bestScore.toLocaleString();
-                    localStorage.setItem('2048_drop_best_score', bestScore.toString());
+                    safeStorage.setItem('2048_drop_best_score', bestScore.toString());
                   }
                   saveGameProgress();
                 })
@@ -1360,8 +1425,8 @@
     }
 
     function saveGameProgress() {
-      localStorage.setItem('2048_drop_score', score.toString());
-      localStorage.setItem('2048_drop_best_score', bestScore.toString());
+      safeStorage.setItem('2048_drop_score', score.toString());
+      safeStorage.setItem('2048_drop_best_score', bestScore.toString());
       if (startBestScoreElem) startBestScoreElem.textContent = bestScore.toLocaleString();
 
       if (typeof window.bridge !== 'undefined' && window.bridge.storage) {
@@ -2111,8 +2176,8 @@
 
     function resizeCanvas() {
       const rect = canvasWrapper.getBoundingClientRect();
-      width = Math.round(rect.width);
-      height = Math.round(rect.height);
+      width = Math.max(300, Math.round(rect.width) || window.innerWidth || 420);
+      height = Math.max(450, Math.round(rect.height) || (window.innerHeight - 150) || 660);
       dpr = window.devicePixelRatio || 1;
 
       canvas.width = width * dpr;
@@ -2202,6 +2267,7 @@
         sm.style.setProperty('display', 'none', 'important');
         sm.style.setProperty('visibility', 'hidden', 'important');
         sm.style.setProperty('pointer-events', 'none', 'important');
+        try { sm.remove(); } catch(_) {}
       }
 
       isGameStarted = true;
@@ -2234,6 +2300,14 @@
       } catch(_) {}
     }
 
+    window.triggerInternalStart = function() {
+      isGameStarted = true;
+      isPlatformPaused = false;
+      canDrop = true;
+      dropCountInCurrentSession = 0;
+      hasSession5DropAdShown = false;
+      saveGameProgress();
+    };
     window.handleStartGame = handleStartGame;
     startGameBtn.addEventListener('click', handleStartGame);
     startGameBtn.addEventListener('pointerup', handleStartGame);
